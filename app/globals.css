@@ -1,0 +1,105 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-ui), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-display), ui-serif, Georgia, "Times New Roman", serif;
+  --font-mono: var(--font-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+:root {
+  --canvas: #0e0d0b;
+  --panel: #161410;
+  --ink: #efe8d6;
+  --muted: #9a917c;
+  --brass: #c4a35a;
+  --signal: #4ea89a;
+  --alert: #d4654a;
+  --line: rgba(228, 216, 180, 0.12);
+  --line-strong: rgba(228, 216, 180, 0.24);
+  --dock-h: 0px;
+  --sheet-peek: 3.65rem;
+}
+
+@media (max-width: 767px) {
+  :root {
+    --dock-h: calc(3.65rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+html,
+body {
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+@layer utilities {
+  .bg-grid-dots {
+    background-image: radial-gradient(rgba(196, 163, 90, 0.18) 0.6px, transparent 0.6px);
+    background-size: 22px 22px;
+  }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  .rail-x {
+    display: flex;
+    gap: 0.4rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    touch-action: pan-x;
+  }
+
+  .rail-x::-webkit-scrollbar {
+    display: none;
+  }
+
+  .rail-x > * {
+    scroll-snap-align: start;
+    flex-shrink: 0;
+  }
+
+  .case-map {
+    min-height: min(38dvh, 340px);
+  }
+
+  @media (min-width: 640px) {
+    .case-map {
+      min-height: min(44dvh, 420px);
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .case-map {
+      min-height: min(56dvh, 560px);
+    }
+  }
+
+  @media (max-width: 1023px) and (min-height: 820px) {
+    .case-map {
+      min-height: min(46dvh, 480px);
+    }
+  }
+
+  @media (orientation: landscape) and (max-height: 520px) {
+    .case-map {
+      min-height: 150px;
+    }
+
+    .case-lede {
+      display: none;
+    }
+  }
+
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
