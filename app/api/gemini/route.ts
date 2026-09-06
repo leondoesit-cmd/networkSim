@@ -1,23 +1,36 @@
 import { GoogleGenAI } from '@google/genai';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 
 export async function POST(req: NextRequest) {
   try {
-    const { prompt, history, mode } = await req.json();
+    const { prompt, history } = await req.json();
 
     if (!prompt && (!history || history.length === 0)) {
-      return NextResponse.json({ error: 'חסר תוכן לשאילתה' }, { status: 400 });
+      return new Response(
+        JSON.stringify({ error: 'חסר תוכן לשאילתה' }),
+        { 
+          status: 400,
+          headers: { 'Content-Type': 'application/json; charset=utf-8' }
+        }
+      );
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return NextResponse.json(
-        { 
-          error: 'מפתח API אינו מוגדר בסביבה',
-          text: 'שימו לב: מפתח GEMINI_API_KEY אינו מוגדר כרגע. אנא הגדר אותו בהגדרות המערכת כדי להפעיל את היועץ החכם.'
-        }, 
-        { status: 200 }
-      );
+      const warningText = 'שימו לב: מפתח GEMINI_API_KEY אינו מוגדר כרגע. אנא הגדר אותו בהגדרות המערכת כדי להפעיל את היועץ החכם.';
+      const encoder = new TextEncoder();
+      const readable = new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode(warningText));
+          controller.close();
+        },
+      });
+      return new Response(readable, {
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Cache-Control': 'no-cache, no-transform',
+        },
+      });
     }
 
     const ai = new GoogleGenAI({ apiKey });
@@ -47,38 +60,67 @@ export async function POST(req: NextRequest) {
 
     if (Array.isArray(history) && history.length > 0) {
       for (const msg of history) {
-        contents.push({
-          role: msg.role === 'user' ? 'user' : 'model',
-          parts: [{ text: msg.content }]
-        });
+        if (msg.content && msg.content.trim()) {
+          contents.push({
+            role: msg.role === 'user' ? 'user' : 'model',
+            parts: [{ text: msg.content }],
+          });
+        }
       }
     }
 
     if (prompt) {
       contents.push({
         role: 'user',
-        parts: [{ text: prompt }]
+        parts: [{ text: prompt }],
       });
     }
 
-    const response = await ai.models.generateContent({
+    const responseStream = await ai.models.generateContentStream({
       model: 'gemini-3.8-flash',
       contents,
       config: {
         systemInstruction,
         temperature: 0.7,
-      }
+      },
     });
 
-    return NextResponse.json({ text: response.text });
+    const encoder = new TextEncoder();
+    const readableStream = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const chunk of responseStream) {
+            const text = chunk.text;
+            if (text) {
+              controller.enqueue(encoder.encode(text));
+            }
+          }
+        } catch (err) {
+          console.error('Stream processing error:', err);
+          controller.error(err);
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(readableStream, {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+      },
+    });
   } catch (error: any) {
     console.error('Gemini API Error:', error);
-    return NextResponse.json(
-      { 
+    return new Response(
+      JSON.stringify({
         error: 'שגיאה בתקשורת עם שרת ה-AI',
-        details: error?.message || 'אנא נסה שוב בעוד מספר רגעים.' 
-      }, 
-      { status: 500 }
+        details: error?.message || 'אנא נסה שוב בעוד מספר רגעים.',
+      }),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      }
     );
   }
 }

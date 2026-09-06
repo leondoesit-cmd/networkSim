@@ -122,6 +122,11 @@ class AudioFeedbackManager {
     } catch (e) {}
   }
 
+  // Warning / alert alias
+  public playWarning() {
+    this.playAlert();
+  }
+
   // Success chime on link restoration or answer
   public playSuccess() {
     if (this.isMuted) return;

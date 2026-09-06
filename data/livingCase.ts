@@ -52,6 +52,22 @@ export interface CaseStage {
   layerFocus: OsiLayer[];
 }
 
+export interface CaseTriageOption {
+  id: string;
+  label: Copy;
+  isCorrect: boolean;
+  isCatastrophic?: boolean;
+  consequence: Copy;
+  resolvedSites?: string[];
+  scoreDelta: number; // e.g. +15 for correct, -10 for naive, -25 for catastrophic
+}
+
+export interface CaseTriageDilemma {
+  stageId: string;
+  question: Copy;
+  options: CaseTriageOption[];
+}
+
 export interface CaseTopicRole {
   nodeId: string;
   osiLayers: OsiLayer[];
@@ -754,4 +770,257 @@ export const TOPIC_NAMES: Record<string, Copy> = {
   'node-field-troubleshooting-methodology': { he: 'מתודולוגיית תקלות', en: 'Field method' },
   'node-cli-toolset-diagnostics': { he: 'ארגז CLI', en: 'CLI toolkit' },
   'node-vendor-management-sla': { he: 'ספקים ו־SLA', en: 'Vendors & SLA' },
+};
+
+export const TRIAGE_DILEMMAS: Record<string, CaseTriageDilemma> = {
+  cameras: {
+    stageId: 'cameras',
+    question: {
+      he: 'בשעה 06:52 ארבע מצלמות LPR בצומת אחוזה/ויצמן כבו במקביל. הטמפרטורה בארון עלתה ל-41°C. מה הצעד המיידי שלך?',
+      en: 'At 06:52, four LPR cameras at Ahuza/Weizmann junction went offline simultaneously. Cabinet temperature rose to 41°C. What is your immediate triage move?'
+    },
+    options: [
+      {
+        id: 'cameras-power-inline',
+        label: {
+          he: 'בדיקת show power inline וזיהוי עומס יתר על תקציב 120W בגלל גופי החימום',
+          en: 'Check show power inline and recognize 120W budget overload from cold night heaters'
+        },
+        isCorrect: true,
+        scoreDelta: 20,
+        resolvedSites: ['weizmann'],
+        consequence: {
+          he: 'מדויק! מתג ה-Moxa התעשייתי ניתק פורטים כדי להגן על עצמו מעודף צריכה של גופי החימום בלילה הקר. הגדרת עדיפות PoE או ספק מוגדל מחזירים את המצלמות ללא נגיעה בסיב.',
+          en: 'Spot on! The industrial Moxa switch shed ports to protect itself from cold-night heater overload. Setting PoE priority or expanding the PSU restores the cameras without touching fiber.'
+        }
+      },
+      {
+        id: 'cameras-bezeq-ticket',
+        label: {
+          he: 'פתיחת קריאה דחופה לבזק על חשד לקרע בסיב האופטי',
+          en: 'Open urgent Bezeq ticket on suspected fiber cut'
+        },
+        isCorrect: false,
+        scoreDelta: -10,
+        consequence: {
+          he: 'שגוי (תגובה נאיבית): פינג למתג החזיר 1.5ms וה-Rx האופטי הוא -4.8 dBm. הסיב תקין לחלוטין. בזק יחייבו על קריאת שווא בעוד 4 שעות ואבד זמן יקר.',
+          en: 'Incorrect (naive response): Ping to switch returns in 1.5ms and optical Rx is -4.8 dBm. Fiber is fine. Bezeq will bill for a false dispatch after 4 hours with zero progress.'
+        }
+      },
+      {
+        id: 'cameras-reload-core',
+        label: {
+          he: 'אתחול (Reload) של מתג הליבה כדי "לאפס את ה-PoE בארון"',
+          en: 'Reload the core switch to "reset PoE"'
+        },
+        isCorrect: false,
+        isCatastrophic: true,
+        scoreDelta: -25,
+        consequence: {
+          he: 'קטסטרופה! אתחול הליבה הפיל את מוקד 106, ניתק את כל שרתי העירייה, ומתג ה-PoE שבארון הרחוב כלל לא הושפע! החמרת את כל הקריאות בבת אחת.',
+          en: 'Catastrophic! Core reload knocked out dispatch 106, dropped all city hall servers, and the street PoE switch was completely unaffected! You worsened every ticket at once.'
+        }
+      }
+    ]
+  },
+  voice: {
+    stageId: 'voice',
+    question: {
+      he: 'בשעה 07:02 מוקד 106 מדווח על שמע רובוטי וקיטועים בשיחות נכנסות, בזמן ששרת הגבייה מגבה נתונים ב-98% רוחב פס. מה המהלך שלך?',
+      en: 'At 07:02, Dispatch 106 reports robotic clipping audio and call drops while billing server backup saturates Gi0/48 at 98%. What is your move?'
+    },
+    options: [
+      {
+        id: 'voice-qos-trust-shape',
+        label: {
+          he: 'בדיקת תורי QoS במתג Gi0/48, הפעלת mls qos trust dscp ו-Shaping לגיבוי',
+          en: 'Inspect QoS queueing on floor switch Gi0/48, enable mls qos trust dscp and shape backup'
+        },
+        isCorrect: true,
+        scoreDelta: 20,
+        resolvedSites: ['moked'],
+        consequence: {
+          he: 'מצוין! חבילות RTP עם DSCP EF 46 מקבלות עכשיו עדיפות בתור Priority Queue, ותעבורת הגיבוי מוגבלת ולא חונקת את ה-Uplink. השמע במוקד 106 חזר להיות צלול!',
+          en: 'Excellent! RTP packets with DSCP EF 46 now receive Priority Queue forwarding, while backup traffic is rate-shaped and no longer chokes the uplink. Dispatch audio is clear!'
+        }
+      },
+      {
+        id: 'voice-blame-sip-provider',
+        label: {
+          he: 'התקשרות לספק ה-SIP Trunk והטלת האשמה עליהם',
+          en: 'Call SIP trunk provider and blame them'
+        },
+        isCorrect: false,
+        scoreDelta: -10,
+        consequence: {
+          he: 'שגוי (תגובה נאיבית): ספק ה-SIP יוכיח שסימוני ה-SIP תקינים ושהעומס הוא מקומי פנימי במתג הקומה שלך Gi0/48 עקב גיבוי ללא תעדוף QoS.',
+          en: 'Incorrect (naive response): SIP provider demonstrates signaling is clean and that packet drops are inside your own floor switch Gi0/48 queue due to missing QoS.'
+        }
+      },
+      {
+        id: 'voice-kill-sip-daemon',
+        label: {
+          he: 'הריגת תהליך (Kill) שירות ה-SIP במרכזייה / CUCM',
+          en: 'Kill the SIP service daemon on PBX / CUCM'
+        },
+        isCorrect: false,
+        isCatastrophic: true,
+        scoreDelta: -25,
+        consequence: {
+          he: 'קטסטרופה! השבתת לחלוטין את מוקד החירום 106! שיחות חירום של תושבים נופלות מיד עם צליל תפוס וכל מוקדני החירום מושבתים.',
+          en: 'Catastrophic! You took down emergency dispatch 106 completely! Resident emergency calls immediately drop to busy signals while all call takers are severed.'
+        }
+      }
+    ]
+  },
+  storm: {
+    stageId: 'storm',
+    question: {
+      he: 'בשעה 07:08 אגף הנדסה מנותק כליל, נוריות המתג מהבהבות בטירוף והמעבד על 99%. איך תעצור את הסופה?',
+      en: 'At 07:08, Engineering department is completely cut off, switch LEDs are thrashing, and CPU is at 99%. How do you halt the storm?'
+    },
+    options: [
+      {
+        id: 'storm-shut-loop-bpdu',
+        label: {
+          he: 'בדיקת processes cpu ו-show mac, כיבוי פורט Gi0/14 עם הלולאה והפעלת bpduguard',
+          en: 'Check show processes cpu and show mac, shut Gi0/14 with home loop, enable bpduguard'
+        },
+        isCorrect: true,
+        scoreDelta: 20,
+        resolvedSites: ['engineering'],
+        consequence: {
+          he: 'מדויק! ניתקת את הפורט שאליו חובר מתג ביתי שיצר לולאת L2 קטלנית ללא STP. מעבד המתג ירד מ-99% ל-3%, ו-BPDU Guard ימנע לולאות דומות בעתיד.',
+          en: 'Spot on! You shut down the port where an unmanaged switch caused a lethal L2 loop. CPU plummeted from 99% to 3%, and BPDU Guard secures against future rogue loops.'
+        }
+      },
+      {
+        id: 'storm-patch-cable',
+        label: {
+          he: 'חיבור כבל רשת נוסף בין המתג לקיר כדי "לחלק את עומס השידורים"',
+          en: 'Patch another cable into the office switch'
+        },
+        isCorrect: false,
+        scoreDelta: -10,
+        consequence: {
+          he: 'שגוי (תגובה נאיבית): יצרת לולאת Layer 2 נוספת! היעדר מנגנון מניעה הכפיל את סופת ה-Broadcast והמתג קרס כליל.',
+          en: 'Incorrect (naive response): You created an additional Layer 2 loop! The absence of loop protection doubled the broadcast storm, crashing the switch.'
+        }
+      },
+      {
+        id: 'storm-reload-during-storm',
+        label: {
+          he: 'אתחול (Reload) של מתג הליבה בזמן שסופת ה-Broadcast משתוללת',
+          en: 'Reload the core switch while storm is active'
+        },
+        isCorrect: false,
+        isCatastrophic: true,
+        scoreDelta: -25,
+        consequence: {
+          he: 'קטסטרופה! בזמן עליית הליבה, חבילות ה-Broadcast מהסוויץ׳ הביתי הציפו את כל הפורטים לפני ש-STP התכנס, והשבתת את כל קריית העירייה!',
+          en: 'Catastrophic! During core reboot, broadcasts from the rogue switch overwhelmed interfaces before STP converged, taking down all of City Hall!'
+        }
+      }
+    ]
+  },
+  identity: {
+    stageId: 'identity',
+    question: {
+      he: 'בשעה 07:11 שלוש עמדות חדשות במוקד מקבלות 169.254 (APIPA) ב-VLAN 40 ולא מגיעות ל-DHCP. מה התיקון?',
+      en: 'At 07:11, three new dispatch desks sit on 169.254 (APIPA) in VLAN 40 and cannot reach DHCP. What is the fix?'
+    },
+    options: [
+      {
+        id: 'identity-helper-address',
+        label: {
+          he: 'הוספת ip helper-address 10.50.1.15 ל-SVI 40 ואימות Scope ב-DHCP',
+          en: 'Add ip helper-address 10.50.1.15 to SVI 40 and check scope'
+        },
+        isCorrect: true,
+        scoreDelta: 20,
+        resolvedSites: ['moked'],
+        consequence: {
+          he: 'מדויק! שידורי Broadcast של DHCP אינם חוצים ממשקי SVI (נתב L3). ה-helper-address העביר אותם כ-Unicast לשרת ה-DHCP בליבה, והעמדות קיבלו מיד כתובות תקינות.',
+          en: 'Spot on! DHCP broadcasts do not cross an SVI without a relay agent. The helper-address forwarded them as unicast to the core DHCP server, and desks immediately acquired valid IPs.'
+        }
+      },
+      {
+        id: 'identity-replace-nics',
+        label: {
+          he: 'החלפה פיזית של כרטיסי הרשת (NIC) בשלוש העמדות הבעייתיות',
+          en: 'Replace the network cards on the 3 desks'
+        },
+        isCorrect: false,
+        scoreDelta: -10,
+        consequence: {
+          he: 'שגוי (תגובה נאיבית): בזבוז זמן ומשאבים. APIPA מעיד ששכבות L1 ו-L2 תקינות וכרטיסי הרשת עובדים, אך אין מענה בשכבה L3.',
+          en: 'Incorrect (naive response): Waste of time and parts. APIPA indicates L1 and L2 are functioning fine, but there is no L3 response from the DHCP server.'
+        }
+      },
+      {
+        id: 'identity-static-core-subnet',
+        label: {
+          he: 'הגדרת כתובות סטטיות בעמדות מתת-הרשת של שרתי הליבה (VLAN 10)',
+          en: 'Assign static IP from core subnet to desks'
+        },
+        isCorrect: false,
+        isCatastrophic: true,
+        scoreDelta: -20,
+        consequence: {
+          he: 'סכנה חמורה! הגדרת כתובות ידניות מ-VLAN הליבה יצרה התנגשות כתובות IP (IP Conflict) מול שרתי ה-DC/PRTG והפרה את חוקי האבטחה וה-VLANs!',
+          en: 'Severe hazard! Setting manual IPs from the core server subnet caused an IP conflict with core DC/PRTG servers and severely violated segmentation policies!'
+        }
+      }
+    ]
+  },
+  paths: {
+    stageId: 'paths',
+    question: {
+      he: 'בשעה 07:18 בזק טוענים שה-Metro תקין, בסיב לפארק יש שגיאות CRC, ורדיו 60GHz בהמתנה. מה הצעד הנכון?',
+      en: 'At 07:18, Bezeq confirms Metro-E is healthy, park fiber shows CRC errors, and 60GHz radio is on standby. What is the right move?'
+    },
+    options: [
+      {
+        id: 'paths-verify-metro-ferrule',
+        label: {
+          he: 'אימות תקינות Metro-E, השארת רדיו 60GHz כגיבוי, וניקוי מחבר סיב (Ferrule)',
+          en: 'Verify Bezeq Metro-E is healthy, keep 60GHz radio as standby, clean fiber ferrule'
+        },
+        isCorrect: true,
+        scoreDelta: 20,
+        resolvedSites: ['isp', 'park'],
+        consequence: {
+          he: 'מעולה! בזק אכן היו תקינים. שגיאות ה-CRC נבעו ממחבר סיב אופטי מלוכלך וניקויו פתר את הבעיה, תוך שמירה על רדיו 60GHz כגיבוי מבלי להציף את הקאנטרי.',
+          en: 'Superb! Bezeq was indeed healthy. CRC errors were caused by a dirty optical ferrule; cleaning it resolved packet loss while keeping 60GHz as standby without choking the club.'
+        }
+      },
+      {
+        id: 'paths-failover-radio-cameras',
+        label: {
+          he: 'העברת כל מצלמות ה-4K לקישור הרדיו 60GHz והצפת קישור הקאנטרי',
+          en: 'Failover all 4K cameras onto 60GHz wireless link and saturate club'
+        },
+        isCorrect: false,
+        scoreDelta: -15,
+        consequence: {
+          he: 'שגוי: תעבורת מצלמות 4K כבדה סתמה לחלוטין את קישור הרדיו, יצרה השהיות כבדות והפילה את הרשת של מועדון הספורט והקאנטרי.',
+          en: 'Incorrect: Heavy 4K camera streams completely overwhelmed the wireless link, creating massive latency and collapsing the country club network.'
+        }
+      },
+      {
+        id: 'paths-break-fiber-ring',
+        label: {
+          he: 'ניתוק יזום של חיבור טבעת הסיב האופטי (Fiber Ring) לבדיקה',
+          en: 'Break the fiber ring connection'
+        },
+        isCorrect: false,
+        isCatastrophic: true,
+        scoreDelta: -25,
+        consequence: {
+          he: 'קטסטרופה! שבירת טבעת הסיב ניתקה במקביל את בית הספר ואת הפארק, גרמה ל-Topology Change מתמיד והפילה קווים עירוניים קריטיים!',
+          en: 'Catastrophe! Breaking the fiber ring simultaneously severed the school and the park, triggered continuous STP/ring flapping, and downed critical municipal links!'
+        }
+      }
+    ]
+  }
 };

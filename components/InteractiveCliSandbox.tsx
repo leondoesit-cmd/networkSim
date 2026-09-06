@@ -70,6 +70,113 @@ const CHALLENGES: CliLabChallenge[] = [
   },
 ];
 
+export const COMMAND_DICTIONARY = [
+  'show interfaces trunk',
+  'show interfaces status',
+  'show vlan brief',
+  'show power inline',
+  'show processes cpu',
+  'show mac address-table',
+  'show ip route',
+  'show ip interface brief',
+  'show running-config',
+  'show cdp neighbors',
+  'configure terminal',
+  'interface gigabitEthernet',
+  'switchport mode access',
+  'switchport access vlan',
+  'no shutdown',
+  'shutdown',
+  'spanning-tree bpduguard enable',
+  'ip helper-address',
+  'exit',
+];
+
+// Syntax Highlighting Tokenizer for Cisco terminal output
+const TOKEN_REGEX = /(administratively down|err-disabled|\b(?:GigabitEthernet|FastEthernet|TenGigabitEthernet|Gi|Fa|Te|Eth)\d+(?:\/\d+)*(?:\.\d+)?\b|\b(?:\d{1,3}\.){3}\d{1,3}(?:\/\d{1,2})?\b|\b(?:Vlan|VLAN)\s*\d+\b|\bup\b|\bdown\b)/gi;
+
+function renderHighlightedLine(line: string, lineIndex: number) {
+  const segments = line.split(TOKEN_REGEX);
+
+  return (
+    <span key={lineIndex} className="block">
+      {segments.map((seg, segIdx) => {
+        if (!seg) return null;
+        const lower = seg.toLowerCase();
+
+        if (lower === 'administratively down') {
+          return (
+            <span key={segIdx} className="text-amber-400 font-semibold">
+              {seg}
+            </span>
+          );
+        }
+        if (lower === 'err-disabled') {
+          return (
+            <span key={segIdx} className="text-rose-400 font-semibold">
+              {seg}
+            </span>
+          );
+        }
+        if (lower === 'up') {
+          return (
+            <span key={segIdx} className="text-emerald-400 font-semibold">
+              {seg}
+            </span>
+          );
+        }
+        if (lower === 'down') {
+          return (
+            <span key={segIdx} className="text-red-400 font-semibold">
+              {seg}
+            </span>
+          );
+        }
+        if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/.test(seg)) {
+          return (
+            <span key={segIdx} className="text-cyan-300 font-mono">
+              {seg}
+            </span>
+          );
+        }
+        if (/^vlan/i.test(seg)) {
+          return (
+            <span key={segIdx} className="text-amber-300 font-medium">
+              {seg}
+            </span>
+          );
+        }
+        if (/^(GigabitEthernet|FastEthernet|TenGigabitEthernet|Gi|Fa|Te|Eth)\d+/i.test(seg)) {
+          return (
+            <span key={segIdx} className="text-[#c4a35a] font-semibold">
+              {seg}
+            </span>
+          );
+        }
+
+        return <span key={segIdx}>{seg}</span>;
+      })}
+    </span>
+  );
+}
+
+function CliOutputView({ output, isError }: { output: string; isError?: boolean }) {
+  if (isError) {
+    return (
+      <pre className="whitespace-pre-wrap font-mono text-[11px] sm:text-xs overflow-x-auto text-red-400">
+        {output}
+      </pre>
+    );
+  }
+
+  const lines = output.split('\n');
+  return (
+    <pre className="whitespace-pre-wrap font-mono text-[11px] sm:text-xs overflow-x-auto text-slate-300">
+      {lines.map((line, idx) => renderHighlightedLine(line, idx))}
+    </pre>
+  );
+}
+
 export function InteractiveCliSandbox() {
   const [activeTab, setActiveTab] = useState<'free' | 'challenge'>('free');
   const [currentChallengeIndex, setCurrentChallengeIndex] = useState(0);
@@ -78,7 +185,7 @@ export function InteractiveCliSandbox() {
     {
       prompt: '',
       command: '',
-      output: 'Cisco IOS Software, Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a\nRa\'anana Municipal Core Switch 1 (Ahuza 103 Datacenter)\nType "help" or "?" for available commands list.\n',
+      output: 'Cisco IOS Software, Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a\nRa\'anana Municipal Core Switch 1 (Ahuza 103 Datacenter)\nType "help" or "?" for available commands, or press Tab for auto-completion.\n',
     },
   ]);
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
@@ -111,6 +218,68 @@ export function InteractiveCliSandbox() {
     return 'Raanana-SW1#';
   };
 
+  // Tab completion engine
+  const handleTabCompletion = () => {
+    const cur = inputCommand.trim();
+    const currentPrompt = getPromptString();
+
+    if (!cur) {
+      // Empty input: list available commands
+      setHistory((prev) => [
+        ...prev,
+        {
+          prompt: currentPrompt,
+          command: '',
+          output: COMMAND_DICTIONARY.join('\n'),
+        },
+      ]);
+      audioFeedback.playKeyClick();
+      return;
+    }
+
+    const curLower = cur.toLowerCase();
+    const matches = COMMAND_DICTIONARY.filter((cmd) =>
+      cmd.toLowerCase().startsWith(curLower)
+    );
+
+    if (matches.length === 1) {
+      setInputCommand(matches[0]);
+      audioFeedback.playKeyClick();
+    } else if (matches.length > 1) {
+      // Multiple matches: find longest common prefix
+      let commonPrefix = matches[0];
+      for (let i = 1; i < matches.length; i++) {
+        while (!matches[i].toLowerCase().startsWith(commonPrefix.toLowerCase())) {
+          commonPrefix = commonPrefix.slice(0, -1);
+        }
+      }
+
+      if (commonPrefix.length > cur.length) {
+        setInputCommand(commonPrefix);
+      }
+
+      // Show hints in terminal output
+      setHistory((prev) => [
+        ...prev,
+        {
+          prompt: currentPrompt,
+          command: cur,
+          output: matches.join('    '),
+        },
+      ]);
+      audioFeedback.playKeyClick();
+    } else {
+      // Check partial match on sub-command (e.g. interface names or vlan params)
+      if (curLower.startsWith('int ') || curLower.startsWith('interface ')) {
+        setInputCommand('interface GigabitEthernet1/0/14');
+        audioFeedback.playKeyClick();
+      } else if (curLower.startsWith('switchport access ')) {
+        setInputCommand('switchport access vlan 50');
+        audioFeedback.playKeyClick();
+      }
+    }
+  };
+
   const handleCommandSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const rawCmd = inputCommand.trim();
@@ -130,17 +299,24 @@ export function InteractiveCliSandbox() {
     // Command parser
     if (cmdLower === 'help' || cmdLower === '?') {
       output = `Available CLI Commands in this municipal environment:
-  show ip interface brief   - Display summary of all switch interfaces
+  show interfaces trunk     - Display trunking ports & 802.1Q encapsulation
+  show interfaces status    - Port status table, duplex, speed, and VLANs
   show vlan brief           - List configured municipal VLANs
-  show spanning-tree        - Display STP topology and root bridge info
   show power inline         - Show PoE allocation & power consumption
+  show processes cpu        - Monitor switch CPU utilization
   show mac address-table    - Display dynamically learned MAC addresses
+  show ip route             - Display IPv4 municipal routing table
+  show ip interface brief   - Summary of all switch interfaces & IPs
+  show running-config       - View current active configuration in RAM
   show cdp neighbors        - Discover adjacent Cisco switches and IP phones
   ping <ip_address>         - Send ICMP echo requests (e.g. ping 10.24.10.1)
   traceroute <ip_address>   - Trace packet route through Ra'anana WAN
   configure terminal (conf t) - Enter global configuration mode
-  interface <interface_id>  - Enter interface config (e.g. int gi1/0/14)
-  switchport access vlan <id> - Assign access VLAN
+  interface <interface_id>  - Enter interface config (e.g. int GigabitEthernet1/0/14)
+  switchport mode access    - Set port to static access mode
+  switchport access vlan <id> - Assign access VLAN (e.g. vlan 50)
+  spanning-tree bpduguard enable - Enable STP BPDU Guard
+  ip helper-address <ip>    - Configure DHCP Relay helper
   no shutdown / shutdown    - Enable or disable interface
   power inline auto         - Enable PoE on port
   write memory (wr)         - Save running configuration to NVRAM
@@ -152,14 +328,17 @@ export function InteractiveCliSandbox() {
     } else if (cmdLower === 'conf t' || cmdLower === 'configure terminal') {
       setConfigMode('config');
       output = 'Enter configuration commands, one per line. End with CNTL/Z or "exit".';
-    } else if (configMode === 'config' && (cmdLower.startsWith('interface ') || cmdLower.startsWith('int '))) {
+    } else if (
+      (configMode === 'config' || configMode === 'config-if') &&
+      (cmdLower.startsWith('interface ') || cmdLower.startsWith('int ') || cmdLower === 'interface gigabitethernet')
+    ) {
       const parts = rawCmd.split(' ');
       const iface = parts[1] || 'GigabitEthernet1/0/14';
       setCurrentInterface(iface);
       setConfigMode('config-if');
       output = '';
-    } else if (configMode === 'config-if' && cmdLower.startsWith('switchport access vlan ')) {
-      const vlanNum = parseInt(rawCmd.replace('switchport access vlan ', '').trim(), 10);
+    } else if (configMode === 'config-if' && cmdLower.startsWith('switchport access vlan')) {
+      const vlanNum = parseInt(rawCmd.replace(/switchport access vlan/i, '').trim(), 10);
       if (!isNaN(vlanNum)) {
         setPortStates((prev) => ({
           ...prev,
@@ -173,7 +352,13 @@ export function InteractiveCliSandbox() {
         output = '% Incomplete command. Example: switchport access vlan 50';
         isError = true;
       }
-    } else if (configMode === 'config-if' && cmdLower === 'no shutdown' || cmdLower === 'no shut') {
+    } else if (configMode === 'config-if' && cmdLower === 'switchport mode access') {
+      output = `Interface ${currentInterface} mode set to access.`;
+    } else if (configMode === 'config-if' && cmdLower === 'spanning-tree bpduguard enable') {
+      output = `Spanning-tree BPDU Guard enabled on ${currentInterface}.`;
+    } else if (configMode === 'config-if' && cmdLower.startsWith('ip helper-address')) {
+      output = `DHCP helper address configured on ${currentInterface}.`;
+    } else if (configMode === 'config-if' && (cmdLower === 'no shutdown' || cmdLower === 'no shut')) {
       setPortStates((prev) => ({
         ...prev,
         [currentInterface]: {
@@ -182,7 +367,7 @@ export function InteractiveCliSandbox() {
         },
       }));
       output = `%LINK-3-UPDOWN: Interface ${currentInterface}, changed state to up\n%LINEPROTO-5-UPDOWN: Line protocol on Interface ${currentInterface}, changed state to up`;
-    } else if (configMode === 'config-if' && cmdLower === 'shutdown' || cmdLower === 'shut') {
+    } else if (configMode === 'config-if' && (cmdLower === 'shutdown' || cmdLower === 'shut')) {
       setPortStates((prev) => ({
         ...prev,
         [currentInterface]: {
@@ -213,6 +398,116 @@ export function InteractiveCliSandbox() {
     } else if (cmdLower === 'wr' || cmdLower === 'write memory' || cmdLower === 'copy run start') {
       output = 'Building configuration...\n[OK] Running configuration saved to startup-config in NVRAM.';
       audioFeedback.playSuccess();
+    } else if (cmdLower === 'show interfaces trunk' || cmdLower === 'sh int trunk' || cmdLower === 'show int trunk') {
+      output = `Port        Mode             Encapsulation  Status        Native vlan
+Gi1/0/1     on               802.1q         trunking      1
+Te1/0/1     on               802.1q         trunking      1
+Te1/0/2     on               802.1q         trunking      1
+
+Port        Vlans allowed on trunk
+Gi1/0/1     1-4094
+Te1/0/1     10,20,30,50,99
+Te1/0/2     10,20,30,50,99
+
+Port        Vlans in spanning tree forwarding state and not pruned
+Gi1/0/1     1,10,30,50
+Te1/0/1     10,20,30,50,99
+Te1/0/2     10,20,30,50,99`;
+    } else if (cmdLower === 'show interfaces status' || cmdLower === 'sh int status' || cmdLower === 'show int status') {
+      const gi14State = portStates['GigabitEthernet1/0/14'];
+      output = `Port      Name               Status          Vlan       Duplex  Speed Type
+Gi1/0/1   TRUNK_MOKED_106    connected       trunk        a-full a-1000 10/100/1000BaseTX
+Gi1/0/2   FIBER_RING_PARK    connected       trunk        a-full a-1000 10/100/1000BaseTX
+Gi1/0/6   MOKED_PHONE_8845   connected       30           a-full  a-100 10/100/1000BaseTX
+Gi1/0/14  LPR_WEIZMANN_CAM   ${gi14State?.shutdown ? 'disabled       ' : 'connected      '} ${gi14State?.vlan || 1}          a-full a-1000 10/100/1000BaseTX
+Te1/0/1   UPLINK_PRIMARY     connected       trunk          full    10G SFP-10G-SR
+Te1/0/2   UPLINK_SECONDARY   connected       trunk          full    10G SFP-10G-SR`;
+    } else if (cmdLower === 'show processes cpu' || cmdLower === 'sh proc cpu' || cmdLower === 'show proc cpu') {
+      output = `CPU utilization for five seconds: 9%/2%; one minute: 8%; five minutes: 7%
+ PID Runtime(ms)   Invoked      uSecs   5Sec   1Min   5Min TTY Process 
+   1          12       145         82  0.00%  0.00%  0.00%   0 Chunk Manager    
+  34        4102     19842        206  0.89%  0.72%  0.68%   0 Net Background   
+  89       18204    129381        140  2.15%  1.98%  1.85%   0 IP Input         
+ 142        8120     48210        168  1.04%  0.95%  0.90%   0 Spanning Tree    
+ 210       32104    291042        110  3.20%  2.80%  2.50%   0 IOS-XE Operating `;
+    } else if (cmdLower === 'show mac address-table' || cmdLower === 'sh mac' || cmdLower === 'sh mac address-table') {
+      output = `          Mac Address Table
+-------------------------------------------
+Vlan    Mac Address       Type        Ports
+----    -----------       --------    -----
+   1    0014.f24a.8910    DYNAMIC     Gi1/0/2
+  10    001a.a250.7274    STATIC      CPU
+  30    0062.ec12.33aa    DYNAMIC     Gi1/0/6
+  50    7069.79e1.4b8c    DYNAMIC     Gi1/0/14
+  99    cc46.d610.a001    DYNAMIC     Te1/0/1
+Total Mac Addresses for this criterion: 5`;
+    } else if (cmdLower === 'show ip route' || cmdLower === 'sh ip ro' || cmdLower === 'sh ip route') {
+      output = `Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+
+Gateway of last resort is 10.24.99.1 to network 0.0.0.0
+
+S*    0.0.0.0/0 [1/0] via 10.24.99.1, GigabitEthernet1/0/1
+      10.0.0.0/8 is variably subnetted, 6 subnets, 2 masks
+C        10.24.10.0/24 is directly connected, Vlan10
+L        10.24.10.1/32 is directly connected, Vlan10
+C        10.24.30.0/24 is directly connected, Vlan30
+L        10.24.30.1/32 is directly connected, Vlan30
+C        10.24.50.0/24 is directly connected, Vlan50
+L        10.24.50.1/32 is directly connected, Vlan50
+O        10.24.99.0/29 [110/2] via 10.24.99.1, 04:12:30, Te1/0/1`;
+    } else if (cmdLower === 'show running-config' || cmdLower === 'sh run' || cmdLower === 'show run') {
+      const gi14 = portStates['GigabitEthernet1/0/14'];
+      output = `Building configuration...
+Current configuration : 2840 bytes
+!
+version 17.9
+hostname Raanana-SW1
+!
+ip routing
+!
+spanning-tree mode rapid-pvst
+spanning-tree portfast bpduguard default
+!
+interface GigabitEthernet1/0/1
+ description TRUNK TO MOKED 106
+ switchport mode trunk
+!
+interface GigabitEthernet1/0/6
+ description VOIP PHONE 8845 - MOKED 106
+ switchport mode access
+ switchport access vlan 30
+ power inline auto
+!
+interface GigabitEthernet1/0/14
+ description LPR TRAFFIC CAMERA - AHUZA / WEIZMANN
+ switchport mode access
+ switchport access vlan ${gi14?.vlan || 1}
+ ${gi14?.shutdown ? 'shutdown' : 'no shutdown'}
+ spanning-tree bpduguard enable
+!
+interface Vlan10
+ description MUNICIPAL_MGMT
+ ip address 10.24.10.1 255.255.255.0
+!
+interface Vlan30
+ description MOKED_106_VOIP
+ ip address 10.24.30.1 255.255.255.0
+ ip helper-address 10.24.10.200
+!
+interface Vlan50
+ description SMART_CITY_LPR
+ ip address 10.24.50.1 255.255.255.0
+!
+end`;
+    } else if (cmdLower === 'show cdp neighbors' || cmdLower === 'sh cdp nei' || cmdLower === 'show cdp nei') {
+      output = `Capability Codes: R - Router, T - Trans Bridge, B - Source Route Bridge
+                  S - Switch, H - Host, I - IGMP, r - Repeater, P - Phone
+
+Device ID        Local Intrfce     Holdtme    Capability  Platform  Port ID
+Raanana-Dist-SW2 Gi 1/0/1          142              S I   WS-C3850  Gig 1/0/24
+MOKED-SEP0062EC  Gi 1/0/6          165              H P   CP-8845   Port 1
+Raanana-Park-SW1 Gi 1/0/2          130              S I   C9300-24P Gig 1/0/1`;
     } else if (cmdLower === 'show ip interface brief' || cmdLower === 'sh ip int br') {
       output = `Interface                  IP-Address      OK? Method Status                Protocol
 GigabitEthernet1/0/1       10.24.10.2      YES NVRAM  up                    up      
@@ -265,7 +560,7 @@ Success rate is 100 percent (5/5), round-trip min/avg/max = 1/2/4 ms`;
  2 10.24.1.254 (Raanana-Metro-Dark-Fiber-DWDM) 1.102 ms 0.985 ms 1.050 ms
  3 ${target} 1.840 ms 1.720 ms 1.650 ms`;
     } else {
-      output = `% Unknown or unrecognized command: "${rawCmd}". Type "help" or "?" for list.`;
+      output = `% Unknown or unrecognized command: "${rawCmd}". Type "help" or press Tab for list.`;
       isError = true;
     }
 
@@ -303,9 +598,15 @@ Success rate is 100 percent (5/5), round-trip min/avg/max = 1/2/4 ms`;
     }
   };
 
-  // Up / Down arrow navigation for command history
+  // Keyboard navigation & Tab completion handler
   const handleKeyDown = (e: React.KeyboardEvent) => {
     audioFeedback.playKeyClick();
+
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      handleTabCompletion();
+      return;
+    }
 
     if (e.key === 'ArrowUp') {
       e.preventDefault();
@@ -345,7 +646,7 @@ Success rate is 100 percent (5/5), round-trip min/avg/max = 1/2/4 ms`;
             </h3>
           </div>
           <p className="text-xs text-slate-400">
-            אימון פקודות שטח אינטראקטיבי: הקלד פקודות אמת, פתור תקלות תצורה והגדר מתגי ליבה של עיריית רעננה
+            אימון פקודות שטח אינטראקטיבי: הקלד פקודות אמת, השתמש ב-Tab להשלמה אוטומטית, ופתור תקלות במתגי ליבה
           </p>
         </div>
 
@@ -433,7 +734,7 @@ Success rate is 100 percent (5/5), round-trip min/avg/max = 1/2/4 ms`;
               </span>
             ) : (
               <span className="text-slate-500 text-[11px] mr-auto">
-                הקלד פקודות למטה לתיקון ההגדרה
+                הקלד פקודות למטה לתיקון ההגדרה (לחץ Tab להשלמה)
               </span>
             )}
           </div>
@@ -448,12 +749,15 @@ Success rate is 100 percent (5/5), round-trip min/avg/max = 1/2/4 ms`;
         </span>
         {[
           'show ip int br',
+          'show interfaces status',
+          'show interfaces trunk',
           'show vlan brief',
-          'show spanning-tree',
+          'show processes cpu',
+          'show running-config',
           'show power inline',
-          'ping 10.24.10.1',
           'conf t',
           'int gi1/0/14',
+          'switchport mode access',
           'switchport access vlan 50',
           'no shutdown',
           'power inline auto',
@@ -506,7 +810,7 @@ Success rate is 100 percent (5/5), round-trip min/avg/max = 1/2/4 ms`;
           </div>
         </div>
 
-        {/* Terminal Body */}
+        {/* Terminal Body with Real-time Syntax Highlighting */}
         <div className="flex-1 p-3.5 sm:p-5 overflow-y-auto space-y-3 leading-relaxed text-slate-200 select-text">
           {history.map((item, idx) => (
             <div key={idx} className="space-y-1">
@@ -517,13 +821,7 @@ Success rate is 100 percent (5/5), round-trip min/avg/max = 1/2/4 ms`;
                 </div>
               )}
               {item.output && (
-                <pre
-                  className={`whitespace-pre-wrap font-mono text-[11px] sm:text-xs overflow-x-auto ${
-                    item.isError ? 'text-red-400' : 'text-slate-300'
-                  }`}
-                >
-                  {item.output}
-                </pre>
+                <CliOutputView output={item.output} isError={item.isError} />
               )}
             </div>
           ))}
@@ -547,34 +845,18 @@ Success rate is 100 percent (5/5), round-trip min/avg/max = 1/2/4 ms`;
           <div ref={terminalEndRef} />
         </div>
 
-        {/* Mobile-Friendly Virtual Keyboard Bar (Crucial for smartphones and foldables!) */}
+        {/* Mobile-Friendly Virtual Keyboard Bar */}
         <div className="p-2 bg-[#0F1117] border-t border-slate-800 flex items-center justify-between gap-1 overflow-x-auto scrollbar-none">
           <div className="flex items-center gap-1">
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                audioFeedback.playKeyClick();
-                // Tab autocomplete simulation
-                const cur = inputCommand.trim();
-                const candidates = [
-                  'show ip int brief',
-                  'show vlan brief',
-                  'show spanning-tree',
-                  'show power inline',
-                  'configure terminal',
-                  'interface GigabitEthernet1/0/14',
-                  'switchport mode trunk',
-                  'switchport access vlan 50',
-                  'no shutdown',
-                  'power inline auto',
-                  'write memory',
-                ];
-                const match = candidates.find((c) => c.startsWith(cur));
-                if (match) setInputCommand(match);
+                handleTabCompletion();
                 inputRef.current?.focus();
               }}
               className="min-h-[44px] px-3 py-1.5 rounded-lg bg-[#1A1D24] text-slate-300 hover:text-white border border-slate-700 font-mono text-xs font-bold"
+              title="השלמת פקודה (Tab)"
             >
               Tab ⇥
             </button>

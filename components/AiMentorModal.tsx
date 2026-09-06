@@ -55,7 +55,10 @@ export const AiMentorModal: React.FC<AiMentorModalProps> = ({
     if (!messageContent.trim() || isLoading) return;
 
     const userMessage: ChatMessage = { role: 'user', content: messageContent };
-    setMessages((prev) => [...prev, userMessage]);
+    const chatHistory = [...messages];
+
+    // Append user message + empty placeholder model message for streaming
+    setMessages((prev) => [...prev, userMessage, { role: 'model', content: '' }]);
     setInput('');
     setIsLoading(true);
 
@@ -65,19 +68,58 @@ export const AiMentorModal: React.FC<AiMentorModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: messageContent,
-          history: messages,
+          history: chatHistory,
         }),
       });
 
-      const data = await response.json();
-      const replyText = data.text || data.details || 'שגיאה בקבלת תשובה. אנא נסה שוב.';
+      if (!response.ok || !response.body) {
+        let errText = 'שגיאה בקבלת תשובה משרת ה-AI.';
+        try {
+          const errJson = await response.json();
+          if (errJson.details || errJson.error) {
+            errText = errJson.details || errJson.error;
+          }
+        } catch {}
+        setMessages((prev) => {
+          const next = [...prev];
+          if (next.length > 0) {
+            next[next.length - 1] = { role: 'model', content: errText };
+          }
+          return next;
+        });
+        return;
+      }
 
-      setMessages((prev) => [...prev, { role: 'model', content: replyText }]);
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        { role: 'model', content: 'מצטערים, ארעה שגיאת רשת. אנא נסה שנית בעוד רגע.' },
-      ]);
+      // Stream reader with TextDecoder
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let accumulated = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        accumulated += chunk;
+        setMessages((prev) => {
+          const next = [...prev];
+          if (next.length > 0) {
+            next[next.length - 1] = { role: 'model', content: accumulated };
+          }
+          return next;
+        });
+      }
+    } catch (err) {
+      console.error('Streaming error:', err);
+      setMessages((prev) => {
+        const next = [...prev];
+        if (next.length > 0 && next[next.length - 1].role === 'model') {
+          next[next.length - 1] = {
+            role: 'model',
+            content: next[next.length - 1].content || 'מצטערים, ארעה שגיאת רשת. אנא נסה שנית בעוד רגע.',
+          };
+        }
+        return next;
+      });
     } finally {
       setIsLoading(false);
     }
@@ -114,40 +156,41 @@ export const AiMentorModal: React.FC<AiMentorModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-4 sm:p-5 bg-[#0F1117] border-b border-white/10 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-[0_0_15px_rgba(37,99,235,0.4)]">
-              <Bot className="w-5 h-5" />
+        <div className="p-3 sm:p-5 bg-[#0F1117] border-b border-white/10 flex items-center justify-between gap-2 sm:gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-[0_0_15px_rgba(37,99,235,0.4)] shrink-0">
+              <Bot className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-bold text-[#E2E8F0] text-base sm:text-lg">
-                  יועץ רשתות בכיר - עיריית רעננה
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                <h3 className="font-bold text-[#E2E8F0] text-sm sm:text-lg truncate">
+                  יועץ רשתות - עיריית רעננה
                 </h3>
-                <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold flex items-center gap-1">
+                <span className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold flex items-center gap-1 shrink-0">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                  מחובר (AI)
+                  <span className="hidden xs:inline">מחובר (Live Stream)</span>
+                  <span className="xs:hidden">Live</span>
                 </span>
               </div>
-              <p className="text-xs text-slate-400">
+              <p className="text-[10px] sm:text-xs text-slate-400 truncate hidden xs:block">
                 הדרכה אישית מ-0 למשרה 7274, הכנה לראיונות וסימולציית תקלות שטח
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             <button
               onClick={handleClearChat}
-              className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-[#1A1D24] transition-colors text-xs flex items-center gap-1"
+              className="p-1.5 sm:p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-[#1A1D24] transition-colors text-xs flex items-center gap-1"
               title="נקה שיחה"
             >
-              <RotateCcw className="w-4 h-4" />
+              <RotateCcw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
             <button
               onClick={onClose}
-              className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-[#1A1D24] transition-colors"
+              className="p-1.5 sm:p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-[#1A1D24] transition-colors"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
           </div>
         </div>
@@ -173,6 +216,23 @@ export const AiMentorModal: React.FC<AiMentorModalProps> = ({
         <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4 bg-[#0A0C10]/40">
           {messages.map((msg, idx) => {
             const isUser = msg.role === 'user';
+            const isLastModel = !isUser && idx === messages.length - 1;
+            const isStreamingThis = isLastModel && isLoading;
+
+            // Empty placeholder while waiting for first chunk
+            if (isStreamingThis && !msg.content) {
+              return (
+                <div key={idx} className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center shrink-0">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  </div>
+                  <div className="p-3.5 rounded-2xl bg-[#1A1D24] border border-white/10 text-xs text-slate-400 flex items-center gap-2">
+                    <span>היועץ הבכיר מנסח תשובה מותאמת אישית לרשת עיריית רעננה...</span>
+                    <span className="inline-block w-1.5 h-3.5 bg-blue-400 animate-pulse rounded-sm" />
+                  </div>
+                </div>
+              );
+            }
 
             return (
               <div
@@ -201,23 +261,16 @@ export const AiMentorModal: React.FC<AiMentorModalProps> = ({
                   ) : (
                     <div className="markdown-body prose prose-invert max-w-none text-xs sm:text-sm prose-p:leading-relaxed prose-pre:bg-[#0A0C10] prose-pre:border prose-pre:border-slate-800 prose-headings:text-[#E2E8F0]">
                       <Markdown>{msg.content}</Markdown>
+                      {/* Visual Typing Cursor while streaming */}
+                      {isStreamingThis && (
+                        <span className="inline-block w-2 h-4 bg-blue-400 animate-pulse ms-1 align-middle rounded-sm shadow-[0_0_8px_rgba(96,165,250,0.8)]" />
+                      )}
                     </div>
                   )}
                 </div>
               </div>
             );
           })}
-
-          {isLoading && (
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center">
-                <Loader2 className="w-4 h-4 animate-spin" />
-              </div>
-              <div className="p-3 rounded-xl bg-[#1A1D24] border border-white/10 text-xs text-slate-400 flex items-center gap-2">
-                <span>היועץ הבכיר מנסח תשובה מקצועית מותאמת לעיריית רעננה...</span>
-              </div>
-            </div>
-          )}
 
           <div ref={messagesEndRef} />
         </div>

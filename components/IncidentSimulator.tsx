@@ -64,15 +64,15 @@ export const IncidentSimulator: React.FC<IncidentSimulatorProps> = ({ onEarnBadg
   return (
     <div className="w-full space-y-6">
       {/* Top Banner / Selector */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-[#0F1117] border border-white/10 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-[var(--panel)] border border-[var(--line)] shadow-sm">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
-            <h3 className="text-lg font-bold text-[#E2E8F0]">
-              סימולטור תקלות שטח עירוניות - עיריית רעננה
+            <span className="w-2.5 h-2.5 rounded-full bg-[var(--alert)] animate-pulse" />
+            <h3 className="text-lg font-serif font-bold text-[var(--ink)]">
+              סימולטור תקלות שטח עירוניות — עיריית רעננה
             </h3>
           </div>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-[var(--muted)]">
             אימון מעשי בתרחישי אמת מורכבים בדרג ב&apos; (מצלמות LPR, שו״ב, VoIP ולולאות רשת)
           </p>
         </div>
@@ -83,10 +83,10 @@ export const IncidentSimulator: React.FC<IncidentSimulatorProps> = ({ onEarnBadg
             <button
               key={inc.id}
               onClick={() => handleSwitchIncident(idx)}
-              className={`px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
                 activeIncidentIndex === idx
-                  ? 'bg-blue-600 text-white font-bold shadow-[0_0_12px_rgba(37,99,235,0.35)] border border-blue-400'
-                  : 'bg-[#1A1D24] text-slate-400 hover:text-white border border-slate-800'
+                  ? 'bg-[var(--brass)] text-[#1a160f] font-bold shadow-md'
+                  : 'bg-[var(--canvas)] text-[var(--muted)] hover:text-[var(--ink)] border border-[var(--line)]'
               }`}
             >
               <span>קריאה #{idx + 1}</span>
@@ -96,32 +96,32 @@ export const IncidentSimulator: React.FC<IncidentSimulatorProps> = ({ onEarnBadg
       </div>
 
       {/* Main Incident Card */}
-      <div className="rounded-2xl border border-white/10 bg-[#0F1117] p-5 sm:p-7 backdrop-blur-sm space-y-6 shadow-md">
+      <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5 sm:p-7 backdrop-blur-sm space-y-6 shadow-md">
         
         {/* Ticket Header Details */}
-        <div className="flex flex-wrap items-start justify-between gap-4 pb-5 border-b border-white/10">
+        <div className="flex flex-wrap items-start justify-between gap-4 pb-5 border-b border-[var(--line)]">
           <div className="space-y-1.5">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs px-2.5 py-0.5 rounded-md bg-red-500/10 text-red-400 border border-red-500/20 font-semibold flex items-center gap-1">
-                <Flame className="w-3.5 h-3.5 text-red-400" />
+              <span className="text-xs px-2.5 py-0.5 rounded-md bg-[var(--alert)]/10 text-[var(--alert)] border border-[var(--alert)]/30 font-semibold flex items-center gap-1">
+                <Flame className="w-3.5 h-3.5 text-[var(--alert)]" />
                 {incident.urgencyLabel}
               </span>
-              <span className="text-xs px-2.5 py-0.5 rounded-md bg-[#1A1D24] text-slate-300 border border-slate-700">
+              <span className="text-xs px-2.5 py-0.5 rounded-md bg-[var(--canvas)] text-[var(--ink)] border border-[var(--line)] font-mono">
                 {incident.system}
               </span>
-              <span className="text-xs text-slate-400 flex items-center gap-1">
-                <MapPin className="w-3.5 h-3.5 text-blue-400" />
+              <span className="text-xs text-[var(--muted)] flex items-center gap-1 font-medium">
+                <MapPin className="w-3.5 h-3.5 text-[var(--brass)]" />
                 {incident.siteName}
               </span>
             </div>
-            <h2 className="text-xl sm:text-2xl font-bold text-[#E2E8F0]">
+            <h2 className="text-xl sm:text-2xl font-serif font-bold text-[var(--ink)]">
               {incident.title}
             </h2>
           </div>
 
           <button
             onClick={handleReset}
-            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 px-3 py-1.5 rounded-lg bg-[#1A1D24] border border-slate-700 transition-colors"
+            className="flex items-center gap-1.5 text-xs text-[var(--muted)] hover:text-[var(--ink)] px-3 py-1.5 rounded-lg bg-[var(--canvas)] border border-[var(--line)] transition-colors cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>איפוס חקירה</span>
@@ -129,7 +129,7 @@ export const IncidentSimulator: React.FC<IncidentSimulatorProps> = ({ onEarnBadg
         </div>
 
         {/* Dispatch Report Box */}
-        <div className="p-4 rounded-xl bg-[#1A1D24] border border-white/10 space-y-2">
+        <div className="p-4 rounded-xl bg-[var(--canvas)] border border-[var(--line)] space-y-2">
           <div className="flex items-center gap-2 text-xs font-bold text-amber-400">
             <AlertTriangle className="w-4 h-4" />
             <span>דיווח ראשוני ממוקד העירייה:</span>
